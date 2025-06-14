@@ -1,10 +1,21 @@
 # requirements.txt
 
+# Core web server
 Flask==2.3.3
 gunicorn==21.2.0
+
+# Main TTS library and its dependencies
 WhisperSpeech==0.1.0
 torch==2.1.0
 torchaudio==2.1.0
-# For file parsing
+
+# File parsing
 pdfplumber==0.10.3
 EbookLib==0.18
+beautifulsoup4==4.12.3
+
+# --- FIXES ---
+# 1. Add matplotlib because 'pylab' is a part of it and is a hidden dependency of WhisperSpeech.
+matplotlib==3.8.0
+# 2. Pin numpy to a pre-2.0 version to fix compatibility issues with torch 2.1.
+numpy<2.0
