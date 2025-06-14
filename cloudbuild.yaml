@@ -1,0 +1,50 @@
+# cloudbuild.yaml
+
+steps:
+  # 1. Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_SERVICE_NAME}:${COMMIT_SHA}'
+      - '.'
+
+  # 2. Push the container image to Google Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_SERVICE_NAME}:${COMMIT_SHA}'
+
+  # 3. Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'
+      - '--image'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_SERVICE_NAME}:${COMMIT_SHA}'
+      - '--region'
+      - '${_REGION}'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      # --- IMPORTANT: Resource Allocation ---
+      # WhisperSpeech is memory intensive. Start with a generous allocation.
+      # You may need to increase this if you encounter memory errors.
+      - '--memory=4Gi'
+      - '--cpu=2'
+      # Set a long timeout for the service to handle large documents. (Max: 3600s)
+      - '--timeout=900s' 
+
+# Define images to be pushed to the registry
+images:
+  - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_SERVICE_NAME}:${COMMIT_SHA}'
+
+# Define substitution variables that we will set in the Cloud Build Trigger
+options:
+  substitution_option: 'ALLOW_LOOSE'
+substitutions:
+  _SERVICE_NAME: 'ttsreader'
+  _REGION: 'us-central1' # Change to your preferred region
+  _REPO_NAME: 'ttsreader-repo' # The name of your Artifact Registry repository

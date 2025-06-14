@@ -1,0 +1,10 @@
+# requirements.txt
+
+Flask==2.3.3
+gunicorn==21.2.0
+WhisperSpeech==0.1.0
+torch==2.1.0
+torchaudio==2.1.0
+# For file parsing
+pdfplumber==0.10.3
+EbookLib==0.18
