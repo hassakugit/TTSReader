@@ -11,12 +11,17 @@ from flask import Flask, request, render_template, send_file, jsonify
 from werkzeug.utils import secure_filename
 from TTS.api import TTS
 
+# --- NEW: PyTorch Security Fix ---
+# Newer versions of PyTorch have a security feature that prevents loading
+# arbitrary classes. We need to explicitly trust the configuration class
+# from the TTS model we are using.
+from TTS.tts.configs.xtts_config import XttsConfig
+torch.serialization.add_safe_globals([XttsConfig])
+# --- End of New Code ---
+
 # --- Configuration and Initialization ---
 # Setup logging
 logging.basicConfig(level=logging.INFO)
-
-# The TTS_HOME environment variable is now set in the Dockerfile.
-# This makes the code cleaner and the configuration is centralized.
 
 # Check for CUDA availability
 if torch.cuda.is_available():
@@ -49,7 +54,7 @@ def get_tts_model():
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB upload limit
 
-# --- Helper Functions (No changes below this line) ---
+# --- Helper Functions ---
 def extract_text_from_pdf(file_stream):
     """Extracts text from a PDF file stream."""
     text = ""
