@@ -9,9 +9,10 @@ pdfplumber==0.10.3
 EbookLib==0.18
 beautifulsoup4==4.12.3
 
-# --- NEW TTS LIBRARY ---
-# Coqui-TTS is a much better-packaged library for production use
+# --- Coqui-TTS and its specific dependencies ---
+# TTS library itself
 TTS==0.22.0
 
-# Pin numpy for compatibility with PyTorch (a dependency of TTS)
-numpy==1.26.4
+# Pinning numpy to the *exact* version required by TTS==0.22.0 on Python 3.10
+# This resolves the dependency conflict.
+numpy==1.22.0
