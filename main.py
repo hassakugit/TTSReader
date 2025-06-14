@@ -11,28 +11,24 @@ from flask import Flask, request, render_template, send_file, jsonify
 from werkzeug.utils import secure_filename
 from TTS.api import TTS
 
-# --- FINAL PYTORCH SECURITY FIX v2 ---
-# Newer PyTorch versions require explicitly trusting the model's custom classes.
-# The XTTS model uses multiple custom classes. We must allowlist all of them.
+# --- PyTorch Security Fix ---
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import XttsAudioConfig
 from TTS.config.shared_configs import BaseDatasetConfig
 torch.serialization.add_safe_globals([XttsConfig, XttsAudioConfig, BaseDatasetConfig])
-# --- End of Fix ---
 
 # --- Configuration and Initialization ---
 logging.basicConfig(level=logging.INFO)
 gpu_enabled = torch.cuda.is_available()
 
-# --- THE MODEL PATH IS NOW A MOUNTED VOLUME ---
+# --- Model Path Configuration ---
 MOUNT_PATH = "/mnt/models"
-MODEL_PATH = os.path.join(MOUNT_PATH, "tts_models/multilingual/multi-dataset/xtts_v2/")
+MODEL_DIR = os.path.join(MOUNT_PATH, "tts_models/multilingual/multi-dataset/xtts_v2/")
+CONFIG_PATH = os.path.join(MODEL_DIR, "config.json") # Explicitly define the config path
 
-# --- START OF RESTORED CODE ---
 # Initialize Flask App
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB upload limit
-# --- END OF RESTORED CODE ---
 
 # --- Lazy Initialization of the Model ---
 tts_model = None
@@ -41,18 +37,18 @@ def get_tts_model():
     """Initializes and returns the TTS model, loading it only once."""
     global tts_model
     if tts_model is None:
-        logging.info(f"TTS model not initialized. Loading Coqui-TTS model from path: {MODEL_PATH}")
-        # We need to manually accept the license since we aren't using the downloader
+        logging.info(f"TTS model not initialized. Loading model from {MODEL_DIR}")
         os.environ["COQUI_TOS_AGREED"] = "1"
         try:
-            # We now load the model by pointing to the specific directory.
-            tts_model = TTS(model_path=MODEL_PATH, gpu=gpu_enabled)
+            # --- FINAL FIX: Provide both model_path and config_path ---
+            tts_model = TTS(model_path=MODEL_DIR, config_path=CONFIG_PATH, gpu=gpu_enabled)
             logging.info(f"Coqui-TTS model initialized successfully from mounted volume.")
         except Exception as e:
             logging.error(f"Failed to initialize Coqui-TTS model: {e}", exc_info=True)
-            raise RuntimeError(f"Could not load TTS model from {MODEL_PATH}: {e}")
+            raise RuntimeError(f"Could not load TTS model from {MODEL_DIR}: {e}")
     return tts_model
 
+# ... (The rest of the file is unchanged) ...
 # --- Helper Functions ---
 def extract_text_from_pdf(file_stream):
     """Extracts text from a PDF file stream."""
@@ -88,10 +84,8 @@ def process_text_to_speech(text_to_process):
         audio_path = tmpfile.name
         logging.info(f"Generating audio for text: '{text_to_process[:150]}...'")
         
-        # Use a random speaker from the model's available speakers
         speaker_id = model.speaker_manager.get_random_speaker_id()
         if not speaker_id:
-             # Fallback if no speakers are found for some reason
             all_speakers = model.speaker_manager.get_speaker_ids()
             if all_speakers:
                 speaker_id = all_speakers[0]
