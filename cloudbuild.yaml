@@ -41,6 +41,10 @@ steps:
 images:
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_SERVICE_NAME}:${COMMIT_SHA}'
 
+# --- ADDED THIS SECTION TO FIX THE ERROR ---
+# Specify the GCS bucket to store the build logs
+logsBucket: 'gs://${PROJECT_ID}-cloudbuild-logs'
+
 # Define substitution variables that we will set in the Cloud Build Trigger
 options:
   substitution_option: 'ALLOW_LOOSE'
