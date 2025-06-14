@@ -15,7 +15,9 @@ EbookLib==0.18
 beautifulsoup4==4.12.3
 
 # --- FIXES ---
-# 1. Add matplotlib because 'pylab' is a part of it and is a hidden dependency of WhisperSpeech.
+# 1. Add matplotlib because 'pylab' is a hidden dependency of WhisperSpeech.
 matplotlib==3.8.0
-# 2. Pin numpy to a pre-2.0 version to fix compatibility issues with torch 2.1.
-numpy<2.0
+# 2. Add pandas, another hidden dependency of WhisperSpeech.
+pandas==2.1.4
+# 3. Pin numpy to a specific pre-2.0 version to ensure full compatibility.
+numpy==1.26.4
