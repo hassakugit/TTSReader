@@ -13,25 +13,29 @@ ENV PYTHONUNBUFFERED 1
 ENV APP_MODULE main:app
 # Port that Cloud Run will listen on
 ENV PORT 8080
+# --- NEW: Set the TTS home directory inside the container ---
+# This ensures the model is stored within our app's directory.
+ENV TTS_HOME /app/.tts
 
-# Install system dependencies that might be needed by Python libraries
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file and install dependencies
-# This is done in a separate step to leverage Docker's layer caching
+# Copy requirements and install Python packages
+# This is done first to leverage Docker layer caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
+
+# --- NEW: Bake the TTS model into the Docker image ---
+# This command downloads the model during the build process, so it's
+# available instantly at runtime without needing a live download.
+RUN tts --model_name "tts_models/multilingual/multi-dataset/xtts_v2"
 
 # Copy the rest of the application code into the container
 COPY . .
 
 # Command to run the application using Gunicorn
-# Gunicorn is a production-ready web server for Python.
-# --timeout 0 disables the timeout, which is useful for long-running TTS jobs.
-# --workers 1 is recommended for Cloud Run v2 (CPU always allocated).
-# The $PORT variable is automatically set by Cloud Run.
 CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 $APP_MODULE

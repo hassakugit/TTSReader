@@ -1,8 +1,10 @@
 # cloudbuild.yaml
 
 steps:
-  # 1. Build the container image
+  # 1. Build the container image.
+  #    Increased timeout to allow for large model download.
   - name: 'gcr.io/cloud-builders/docker'
+    timeout: 1800s
     args:
       - 'build'
       - '-t'
@@ -29,26 +31,24 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
-      # --- IMPORTANT: Resource Allocation ---
-      # WhisperSpeech is memory intensive. Start with a generous allocation.
-      # You may need to increase this if you encounter memory errors.
+      # --- Resource Allocation ---
+      # Baking the model into the image doesn't necessarily increase runtime RAM.
+      # 4Gi should still be a good starting point.
       - '--memory=4Gi'
       - '--cpu=2'
-      # Set a long timeout for the service to handle large documents. (Max: 3600s)
       - '--timeout=900s' 
 
 # Define images to be pushed to the registry
 images:
   - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO_NAME}/${_SERVICE_NAME}:${COMMIT_SHA}'
 
-# --- ADDED THIS SECTION TO FIX THE ERROR ---
 # Specify the GCS bucket to store the build logs
 logsBucket: 'gs://${PROJECT_ID}-cloudbuild-logs'
 
-# Define substitution variables that we will set in the Cloud Build Trigger
+# Define substitution variables
 options:
   substitution_option: 'ALLOW_LOOSE'
 substitutions:
   _SERVICE_NAME: 'ttsreader'
-  _REGION: 'us-central1' # Change to your preferred region
-  _REPO_NAME: 'ttsreader-repo' # The name of your Artifact Registry repository
+  _REGION: 'us-central1'
+  _REPO_NAME: 'ttsreader-repo'

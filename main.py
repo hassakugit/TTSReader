@@ -15,11 +15,10 @@ from TTS.api import TTS
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 
-# Set the home directory for Coqui TTS, which is important in stateless environments like Cloud Run
-os.environ["TTS_HOME"] = "/tmp/.tts"
+# The TTS_HOME environment variable is now set in the Dockerfile.
+# This makes the code cleaner and the configuration is centralized.
 
 # Check for CUDA availability
-# On Cloud Run CPU-only instances, this will always be 'cpu'.
 if torch.cuda.is_available():
     gpu_enabled = True
     logging.info("CUDA is available. Using GPU.")
@@ -28,22 +27,21 @@ else:
     logging.info("CUDA not available. Using CPU.")
 
 # --- Lazy Initialization of the Model ---
-# We initialize the tts_model to None. It will be loaded on the first request.
 tts_model = None
 
 def get_tts_model():
     """Initializes and returns the TTS model, loading it only once."""
     global tts_model
     if tts_model is None:
-        logging.info("TTS model not initialized. Loading Coqui-TTS model...")
+        logging.info("TTS model not initialized. Loading Coqui-TTS model from local files...")
         try:
-            # This is the heavy operation that will run only on the first request.
-            # We select a fast, high-quality multi-lingual model.
+            # The model is already downloaded in the Docker image,
+            # so this will be a very fast load from disk.
             model_name = "tts_models/multilingual/multi-dataset/xtts_v2"
             tts_model = TTS(model_name, gpu=gpu_enabled)
             logging.info(f"Coqui-TTS model '{model_name}' initialized successfully.")
         except Exception as e:
-            logging.error(f"Failed to initialize Coqui-TTS model: {e}")
+            logging.error(f"Failed to initialize Coqui-TTS model: {e}", exc_info=True)
             raise RuntimeError(f"Could not load TTS model: {e}")
     return tts_model
 
@@ -51,7 +49,7 @@ def get_tts_model():
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB upload limit
 
-# --- Helper Functions ---
+# --- Helper Functions (No changes below this line) ---
 def extract_text_from_pdf(file_stream):
     """Extracts text from a PDF file stream."""
     text = ""
@@ -77,23 +75,27 @@ def extract_text_from_epub(file_path):
 
 def process_text_to_speech(text_to_process):
     """Generates audio from text using Coqui-TTS."""
-    # Get the model. This will trigger the model load on the first call.
     model = get_tts_model()
     
     if not text_to_process or not text_to_process.strip():
         raise ValueError("Input text is empty.")
     
-    # Using a temporary file for the output is robust for serverless environments
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmpfile:
         audio_path = tmpfile.name
         logging.info(f"Generating audio for text: '{text_to_process[:150]}...'")
         
-        # Coqui-TTS can synthesize long texts by splitting them automatically.
-        # The 'speaker_wav' can be used to clone a voice, but we'll use the default for now.
+        # Use a random speaker from the model's available speakers
+        speaker_id = model.speaker_manager.get_random_speaker_id()
+        if not speaker_id:
+             # Fallback if no speakers are found for some reason
+            all_speakers = model.speaker_manager.get_speaker_ids()
+            if all_speakers:
+                speaker_id = all_speakers[0]
+
         model.tts_to_file(
             text=text_to_process,
             file_path=audio_path,
-            speaker=TTS.speaker_manager.get_random_speaker_id(model.speakers), # Use a random speaker from the model
+            speaker=speaker_id,
             language='en'
         )
         
