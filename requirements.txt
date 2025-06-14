@@ -4,20 +4,14 @@
 Flask==2.3.3
 gunicorn==21.2.0
 
-# Main TTS library and its dependencies
-WhisperSpeech==0.1.0
-torch==2.1.0
-torchaudio==2.1.0
-
 # File parsing
 pdfplumber==0.10.3
 EbookLib==0.18
 beautifulsoup4==4.12.3
 
-# --- FIXES ---
-# 1. Add matplotlib because 'pylab' is a hidden dependency of WhisperSpeech.
-matplotlib==3.8.0
-# 2. Add pandas, another hidden dependency of WhisperSpeech.
-pandas==2.1.4
-# 3. Pin numpy to a specific pre-2.0 version to ensure full compatibility.
+# --- NEW TTS LIBRARY ---
+# Coqui-TTS is a much better-packaged library for production use
+TTS==0.22.0
+
+# Pin numpy for compatibility with PyTorch (a dependency of TTS)
 numpy==1.26.4
