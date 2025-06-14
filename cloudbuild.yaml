@@ -31,10 +31,9 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
-      # --- Resource Allocation ---
-      # Baking the model into the image doesn't necessarily increase runtime RAM.
-      # 4Gi should still be a good starting point.
-      - '--memory=4Gi'
+      # --- FINAL FIX: Increase memory allocation ---
+      # The model requires more than 4GiB to load. Let's give it 8GiB.
+      - '--memory=8Gi'
       - '--cpu=2'
       - '--timeout=900s' 
 
