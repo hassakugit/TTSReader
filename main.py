@@ -16,18 +16,23 @@ from TTS.api import TTS
 # The XTTS model uses multiple custom classes. We must allowlist all of them.
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import XttsAudioConfig
-from TTS.config.shared_configs import BaseDatasetConfig # <-- ADDED THIS LINE
-torch.serialization.add_safe_globals([XttsConfig, XttsAudioConfig, BaseDatasetConfig]) # <-- ADDED THE NEW CLASS HERE
-# --- End of New Code ---
+from TTS.config.shared_configs import BaseDatasetConfig
+torch.serialization.add_safe_globals([XttsConfig, XttsAudioConfig, BaseDatasetConfig])
+# --- End of Fix ---
 
 # --- Configuration and Initialization ---
 logging.basicConfig(level=logging.INFO)
 gpu_enabled = torch.cuda.is_available()
 
 # --- THE MODEL PATH IS NOW A MOUNTED VOLUME ---
-# This path corresponds to the 'dir' in the --mount argument in cloudbuild.yaml
 MOUNT_PATH = "/mnt/models"
 MODEL_PATH = os.path.join(MOUNT_PATH, "tts_models/multilingual/multi-dataset/xtts_v2/")
+
+# --- START OF RESTORED CODE ---
+# Initialize Flask App
+app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB upload limit
+# --- END OF RESTORED CODE ---
 
 # --- Lazy Initialization of the Model ---
 tts_model = None
@@ -48,7 +53,6 @@ def get_tts_model():
             raise RuntimeError(f"Could not load TTS model from {MODEL_PATH}: {e}")
     return tts_model
 
-# ... (The rest of the file remains exactly the same) ...
 # --- Helper Functions ---
 def extract_text_from_pdf(file_stream):
     """Extracts text from a PDF file stream."""
