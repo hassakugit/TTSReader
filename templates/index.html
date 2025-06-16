@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TTS Reader</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📖 TTS Reader</h1>
+            <p>Convert your documents to speech using Kokoro TTS</p>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <div class="input-group">
+                    <h2>Upload File</h2>
+                    <div class="file-upload">
+                        <input type="file" id="fileInput" accept=".txt,.pdf,.epub" />
+                        <label for="fileInput" class="file-label">
+                            <span class="file-icon">📁</span>
+                            Choose File (TXT, PDF, EPUB)
+                        </label>
+                        <span id="fileName" class="file-name"></span>
+                    </div>
+                </div>
+
+                <div class="divider">
+                    <span>OR</span>
+                </div>
+
+                <div class="input-group">
+                    <h2>Paste Text</h2>
+                    <textarea id="textInput" placeholder="Paste your text here..." rows="8"></textarea>
+                </div>
+
+                <div class="input-group">
+                    <h2>Voice Selection</h2>
+                    <select id="voiceSelect">
+                        <option value="af_bella">Bella (Female)</option>
+                        <option value="af_sarah">Sarah (Female)</option>
+                        <option value="am_adam">Adam (Male)</option>
+                        <option value="am_michael">Michael (Male)</option>
+                        <option value="bf_emma">Emma (British Female)</option>
+                        <option value="bm_lewis">Lewis (British Male)</option>
+                    </select>
+                </div>
+
+                <button id="processBtn" class="process-btn">
+                    <span class="btn-text">Process Document</span>
+                    <span class="loading-spinner" style="display: none;">⏳</span>
+                </button>
+            </div>
+
+            <div id="resultsSection" class="results-section" style="display: none;">
+                <h2>Processing Results</h2>
+                <div id="chaptersPreview" class="chapters-preview"></div>
+                <button id="generateAudioBtn" class="generate-btn" style="display: none;">
+                    Generate Audio Files
+                </button>
+                <div id="generationProgress" class="progress-section" style="display: none;">
+                    <h3>Generating Audio...</h3>
+                    <div class="progress-bar">
+                        <div id="progressBar" class="progress-fill"></div>
+                    </div>
+                    <div id="progressText">Processing chapters...</div>
+                </div>
+            </div>
+
+            <div id="downloadSection" class="download-section" style="display: none;">
+                <h2>✅ Generation Complete!</h2>
+                <p>Your audio files have been generated successfully.</p>
+                <a id="downloadLink" class="download-btn" href="#">
+                    📥 Download All Files
+                </a>
+                <div id="filesList" class="files-list"></div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Powered by <a href="https://huggingface.co/spaces/hexgrad/Kokoro-TTS" target="_blank">Kokoro TTS</a></p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
