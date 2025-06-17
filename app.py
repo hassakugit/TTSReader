@@ -112,42 +112,159 @@ def extract_text_from_txt(file_path):
     
     return chapters
 
+from flask import Flask, render_template, request, jsonify, send_file
+import os
+import re
+import PyPDF2
+import ebooklib
+from ebooklib import epub
+from bs4 import BeautifulSoup
+import time
+from werkzeug.utils import secure_filename
+import zipfile
+from io import BytesIO
+import tempfile
+import subprocess
+
 def call_kokoro_tts(text, voice="af_bella"):
-    """Call Kokoro TTS API via Hugging Face Spaces"""
-    api_url = "https://hexgrad-kokoro-tts.hf.space/call/generate_audio"
+    """Generate TTS using multiple local TTS engines"""
+    print(f"Generating TTS for text length: {len(text)} with voice: {voice}")
     
-    # First, queue the request
-    headers = {"Content-Type": "application/json"}
-    data = {
-        "data": [text, voice, 1.0, 1.0, True]  # text, voice, speed, pitch, use_cache
-    }
+    # Limit text length
+    if len(text) > 1000:
+        text = text[:1000] + "..."
     
+    # Try Edge TTS first (Microsoft's high-quality TTS)
     try:
-        response = requests.post(api_url, headers=headers, json=data)
-        if response.status_code == 200:
-            result = response.json()
-            if 'event_id' in result:
-                # Poll for results
-                status_url = f"https://hexgrad-kokoro-tts.hf.space/call/generate_audio/{result['event_id']}"
-                
-                max_attempts = 30
-                for attempt in range(max_attempts):
-                    time.sleep(2)
-                    status_response = requests.get(status_url)
-                    
-                    if status_response.status_code == 200:
-                        status_data = status_response.json()
-                        if status_data.get('status') == 'COMPLETE':
-                            if 'data' in status_data and status_data['data']:
-                                # The API returns a file path or URL
-                                audio_data = status_data['data'][0]
-                                return audio_data
-                        elif status_data.get('status') == 'FAILED':
-                            break
-                
+        print("Attempting Edge TTS...")
+        import asyncio
+        import edge_tts
+        import tempfile
+        
+        # Voice mapping for Edge TTS
+        edge_voices = {
+            "af_bella": "en-US-AriaNeural",      # Female US
+            "af_sarah": "en-US-JennyNeural",     # Female US
+            "am_adam": "en-US-GuyNeural",        # Male US
+            "am_michael": "en-US-DavisNeural",   # Male US
+            "bf_emma": "en-GB-LibbyNeural",      # Female UK
+            "bm_lewis": "en-GB-RyanNeural"       # Male UK
+        }
+        
+        edge_voice = edge_voices.get(voice, "en-US-AriaNeural")
+        
+        async def generate_edge_tts():
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
+                temp_path = tmp_file.name
+            
+            communicate = edge_tts.Communicate(text, edge_voice)
+            await communicate.save(temp_path)
+            
+            if os.path.exists(temp_path):
+                with open(temp_path, 'rb') as f:
+                    audio_data = f.read()
+                os.unlink(temp_path)
+                return audio_data
+            return None
+        
+        # Run the async function
+        audio_data = asyncio.run(generate_edge_tts())
+        
+        if audio_data:
+            print("Edge TTS generation successful!")
+            return audio_data
+            
     except Exception as e:
-        print(f"Error calling Kokoro TTS: {e}")
+        print(f"Error with Edge TTS: {e}")
     
+    # Try Google TTS as fallback
+    try:
+        print("Attempting Google TTS (gTTS)...")
+        from gtts import gTTS
+        import tempfile
+        
+        # Language mapping
+        lang_mapping = {
+            "af_bella": "en",
+            "af_sarah": "en", 
+            "am_adam": "en",
+            "am_michael": "en",
+            "bf_emma": "en",
+            "bm_lewis": "en"
+        }
+        
+        lang = lang_mapping.get(voice, "en")
+        
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp_file:
+            temp_path = tmp_file.name
+        
+        tts = gTTS(text=text, lang=lang, slow=False)
+        tts.save(temp_path)
+        
+        # Convert MP3 to WAV using ffmpeg
+        wav_path = temp_path.replace('.mp3', '.wav')
+        subprocess.run([
+            'ffmpeg', '-i', temp_path, '-ar', '22050', '-ac', '1', wav_path, '-y'
+        ], capture_output=True, check=True)
+        
+        if os.path.exists(wav_path):
+            with open(wav_path, 'rb') as f:
+                audio_data = f.read()
+            
+            # Clean up temp files
+            os.unlink(temp_path)
+            os.unlink(wav_path)
+            
+            print("Google TTS generation successful!")
+            return audio_data
+            
+    except Exception as e:
+        print(f"Error with Google TTS: {e}")
+    
+    # Final fallback to espeak
+    try:
+        print("Using espeak as final fallback...")
+        
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
+            temp_path = tmp_file.name
+        
+        # Voice mapping for espeak
+        espeak_voices = {
+            "af_bella": "en+f3",
+            "af_sarah": "en+f4", 
+            "am_adam": "en+m1",
+            "am_michael": "en+m2",
+            "bf_emma": "en-gb+f3",
+            "bm_lewis": "en-gb+m1"
+        }
+        
+        espeak_voice = espeak_voices.get(voice, "en+f3")
+        
+        cmd = [
+            'espeak-ng', 
+            '-v', espeak_voice,
+            '-s', '150',        # Speed
+            '-a', '100',        # Amplitude
+            '-w', temp_path,    # Output file
+            text
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        
+        if result.returncode == 0 and os.path.exists(temp_path):
+            with open(temp_path, 'rb') as f:
+                audio_data = f.read()
+            
+            os.unlink(temp_path)
+            print("Espeak TTS successful!")
+            return audio_data
+        else:
+            print(f"Espeak failed: {result.stderr}")
+            
+    except Exception as e:
+        print(f"Error with espeak: {e}")
+    
+    print("All TTS methods failed")
     return None
 
 @app.route('/')
@@ -156,19 +273,42 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file selected'}), 400
+    print("=== Upload request received ===")
+    print("Content-Type:", request.content_type)
+    print("Request files:", request.files.keys())
+    print("Request form:", request.form.keys())
     
-    file = request.files['file']
-    text_content = request.form.get('text_content', '').strip()
+    # Handle JSON requests (text-only)
+    if request.content_type == 'application/json':
+        data = request.get_json()
+        print("JSON data:", data)
+        text_content = data.get('text_content', '').strip()
+        file = None
+    else:
+        # Handle form data requests (file uploads)
+        file = request.files.get('file')
+        text_content = request.form.get('text_content', '').strip()
     
-    if not file.filename and not text_content:
-        return jsonify({'error': 'No file selected or text provided'}), 400
+    print(f"File: {file}")
+    print(f"File filename: {file.filename if file else 'No file'}")
+    print(f"Text content length: {len(text_content)}")
+    print(f"Text content preview: {text_content[:100] if text_content else 'No text'}")
+    
+    if not file or not file.filename:
+        if not text_content:
+            print("ERROR: No file and no text content")
+            return jsonify({'error': 'No file selected or text provided'}), 400
+        else:
+            print("No file, but text content found - proceeding with text")
+    
+    if file and file.filename and not allowed_file(file.filename):
+        print(f"ERROR: File type not allowed: {file.filename}")
+        return jsonify({'error': 'File type not allowed'}), 400
     
     chapters = []
     
     # Process uploaded file
-    if file.filename and allowed_file(file.filename):
+    if file and file.filename and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(file_path)
@@ -221,10 +361,13 @@ def generate_audio():
     
     for i, chapter in enumerate(chapters):
         try:
+            print(f"Processing chapter {i+1}/{len(chapters)}: {chapter['title']}")
+            
             # Limit text length for TTS (split if too long)
             text = chapter['content']
             if len(text) > 1000:  # Limit to prevent API timeouts
                 text = text[:1000] + "..."
+                print(f"Text truncated to 1000 characters")
             
             # Generate audio
             audio_data = call_kokoro_tts(text, voice)
@@ -234,29 +377,82 @@ def generate_audio():
                 audio_filename = f"chapter_{i+1:02d}_{chapter['title'].replace(' ', '_')}.wav"
                 audio_path = os.path.join(session_dir, audio_filename)
                 
-                # Note: This is a simplified version. In reality, you'd need to handle
-                # the actual audio data format returned by the API
-                generated_files.append({
-                    'filename': audio_filename,
-                    'title': chapter['title'],
-                    'status': 'success'
-                })
+                try:
+                    # Handle different types of audio data
+                    if isinstance(audio_data, bytes):
+                        # Direct binary audio data
+                        with open(audio_path, 'wb') as f:
+                            f.write(audio_data)
+                        print(f"Saved binary audio: {audio_filename}")
+                    elif isinstance(audio_data, str):
+                        if audio_data.startswith('data:audio'):
+                            # Base64 encoded audio data
+                            import base64
+                            header, encoded = audio_data.split(',', 1)
+                            audio_bytes = base64.b64decode(encoded)
+                            with open(audio_path, 'wb') as f:
+                                f.write(audio_bytes)
+                            print(f"Saved base64 audio: {audio_filename}")
+                        elif audio_data.startswith('http'):
+                            # URL to audio file
+                            audio_response = requests.get(audio_data, timeout=30)
+                            if audio_response.status_code == 200:
+                                with open(audio_path, 'wb') as f:
+                                    f.write(audio_response.content)
+                                print(f"Downloaded and saved audio: {audio_filename}")
+                            else:
+                                raise Exception(f"Failed to download audio from URL: {audio_data}")
+                        else:
+                            # Assume it's a file path or some other string
+                            print(f"Unexpected audio data format: {type(audio_data)} - {str(audio_data)[:100]}")
+                            raise Exception("Unsupported audio data format")
+                    else:
+                        print(f"Unexpected audio data type: {type(audio_data)}")
+                        raise Exception("Unsupported audio data type")
+                    
+                    generated_files.append({
+                        'filename': audio_filename,
+                        'title': chapter['title'],
+                        'status': 'success'
+                    })
+                    
+                except Exception as save_error:
+                    print(f"Error saving audio file: {save_error}")
+                    # Fall back to text file
+                    text_filename = f"chapter_{i+1:02d}_{chapter['title'].replace(' ', '_')}.txt"
+                    text_path = os.path.join(session_dir, text_filename)
+                    with open(text_path, 'w', encoding='utf-8') as f:
+                        f.write(chapter['content'])
+                    
+                    generated_files.append({
+                        'filename': text_filename,
+                        'title': chapter['title'],
+                        'status': 'failed'
+                    })
             else:
+                print(f"TTS failed for chapter {i+1}")
+                # Save as text file if TTS fails
+                text_filename = f"chapter_{i+1:02d}_{chapter['title'].replace(' ', '_')}.txt"
+                text_path = os.path.join(session_dir, text_filename)
+                with open(text_path, 'w', encoding='utf-8') as f:
+                    f.write(chapter['content'])
+                
                 generated_files.append({
-                    'filename': f"chapter_{i+1:02d}_{chapter['title'].replace(' ', '_')}.txt",
+                    'filename': text_filename,
                     'title': chapter['title'],
                     'status': 'failed'
                 })
-                
-                # Save as text file if TTS fails
-                text_path = os.path.join(session_dir, f"chapter_{i+1:02d}_{chapter['title'].replace(' ', '_')}.txt")
-                with open(text_path, 'w', encoding='utf-8') as f:
-                    f.write(chapter['content'])
             
         except Exception as e:
             print(f"Error generating audio for chapter {i+1}: {e}")
+            # Save as text file on any error
+            text_filename = f"chapter_{i+1:02d}_{chapter['title'].replace(' ', '_')}_error.txt"
+            text_path = os.path.join(session_dir, text_filename)
+            with open(text_path, 'w', encoding='utf-8') as f:
+                f.write(f"Error processing chapter: {str(e)}\n\nOriginal content:\n{chapter['content']}")
+            
             generated_files.append({
-                'filename': f"chapter_{i+1:02d}_error.txt",
+                'filename': text_filename,
                 'title': chapter['title'],
                 'status': 'error'
             })
@@ -266,6 +462,20 @@ def generate_audio():
         'session_id': session_id,
         'files': generated_files
     })
+
+@app.route('/audio/<session_id>/<filename>')
+def serve_audio(session_id, filename):
+    """Serve audio files for preview"""
+    try:
+        session_dir = os.path.join(app.config['OUTPUT_FOLDER'], session_id)
+        file_path = os.path.join(session_dir, filename)
+        
+        if os.path.exists(file_path) and filename.endswith(('.wav', '.mp3')):
+            return send_file(file_path, mimetype='audio/wav' if filename.endswith('.wav') else 'audio/mpeg')
+        else:
+            return "Audio file not found", 404
+    except Exception as e:
+        return f"Error serving audio: {str(e)}", 500
 
 @app.route('/download/<session_id>')
 def download_files(session_id):

@@ -4,7 +4,7 @@ services:
   tts-reader:
     build: .
     ports:
-      - "5000:5000"
+      - "2022:2022"
     volumes:
       - ./uploads:/app/uploads
       - ./output:/app/output

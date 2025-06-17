@@ -4,6 +4,11 @@ FROM python:3.9-slim
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     espeak-ng \
+    espeak-ng-data \
+    libespeak-ng-dev \
+    libsndfile1 \
+    pulseaudio \
+    alsa-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
